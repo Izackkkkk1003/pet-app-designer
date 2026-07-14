@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // Only allow POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -11,89 +10,69 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'No image provided' });
     }
 
-    // Strip the "data:image/jpeg;base64," prefix, keep only the raw data
-    const matches = image.match(/^data:(image\/\w+);base64,(.+)$/);
-    if (!matches) {
-      return res.status(400).json({ error: 'Invalid image format' });
-    }
-    const mediaType = matches[1];
-    const base64Data = matches[2];
-
-    const systemPrompt = `You are a kind, patient teacher helping a young ESL 
-primary school student design a mobile app interface for a digital pet game, 
-drawn by hand on paper.
-
-The CORRECT layout is:
-- Top-left: Profile button
-- Top-center: Pet Name box (editable text field)
-- Top-right: Home button
-- Center: A drawing of the pet
-- Bottom-left: Feed button
-- Bottom-center: "All Owned Pets" button
-- Bottom-right: Play button
-
-Look at the uploaded image and:
-1. Identify which of the 7 required elements are present.
-2. For each present element, check if it is in the correct position 
-   (allow drawing imprecision — judge general area, not pixels).
-3. List any missing elements.
-4. List any misplaced elements, with the correct position to suggest.
-5. Write short, warm, simple-English feedback (max 3 sentences), 
-   suitable for a child learning English as a second language. 
-   Use encouraging language and simple words.
-
-Return ONLY valid JSON, no markdown formatting, no code fences, in this exact shape:
-{
-  "detected": ["..."],
-  "misplaced": [{"name": "...", "correctPosition": "..."}],
-  "missing": ["..."],
-  "encouragement": "..."
-}`;
-
-    const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
+        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
         'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
+        'HTTP-Referer': 'https://pet-app-designer.vercel.app',
+        'X-Title': 'Pet App Designer'
       },
       body: JSON.stringify({
-        model: 'claude-5-sonnet',
-        max_tokens: 600,
-        system: systemPrompt,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: { type: 'base64', media_type: mediaType, data: base64Data }
-            },
-            {
-              type: 'text',
-              text: 'Please analyze this student\'s pet app drawing and return the JSON feedback.'
-            }
-          ]
-        }]
+        model: 'anthropic/claude-3.5-sonnet',
+        max_tokens: 1024,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `You are a friendly, encouraging design tutor for primary school ESL students learning UI/UX design. Look at this hand-drawn digital pet app interface and check for these 7 required elements:
+
+1. Profile Button - top-left
+2. Pet Name Box - top-center
+3. Home Button - top-right
+4. Pet Drawing - center
+5. Feed Button - bottom-left
+6. All Owned Pets Button - bottom-center
+7. Play Button - bottom-right
+
+Respond ONLY with valid JSON in this exact format, no other text:
+
+{
+  "found": ["list of element names found in correct position"],
+  "missing": ["list of element names missing or in wrong position"],
+  "score": "X/7",
+  "message": "A short, encouraging, simple-English message (2-3 sentences) for the student praising what they got right and gently suggesting what to add or fix next"
+}`
+              },
+              {
+                type: 'image_url',
+                image_url: { url: image }
+              }
+            ]
+          }
+        ]
       })
     });
 
-    if (!anthropicResponse.ok) {
-      const errorText = await anthropicResponse.text();
-      console.error('Anthropic API error:', errorText);
-      return res.status(502).json({ error: 'AI service error', details: errorText });
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('OpenRouter error:', data);
+      return res.status(500).json({ error: 'AI analysis failed', details: data });
     }
 
-    const data = await anthropicResponse.json();
-    let rawText = data.content[0].text.trim();
+    const rawText = data.choices[0].message.content;
 
-    // Safety net: strip accidental code fences if the model adds them
-    rawText = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '');
+    // Extract JSON even if the model wraps it in markdown code fences
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    const feedback = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
 
-    const result = JSON.parse(rawText);
-    return res.status(200).json(result);
+    return res.status(200).json(feedback);
 
-  } catch (err) {
-    console.error('Server error:', err);
-    return res.status(500).json({ error: 'Something went wrong on our end' });
+  } catch (error) {
+    console.error('Server error:', error);
+    return res.status(500).json({ error: 'Something went wrong', details: error.message });
   }
 }
