@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Design My Digital Pet App! 🐾</title>
+<style>
+  body {
+    font-family: 'Comic Sans MS', 'Trebuchet MS', sans-serif;
+    background: linear-gradient(135deg, #fff6e5, #e0f7fa);
+    margin: 0;
+    padding: 20px;
+    color: #333;
+  }
+  h1 {
+    text-align: center;
+    color: #ff6f61;
+    font-size: 2em;
+  }
+  .container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    justify-content: center;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+  .card {
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    padding: 20px;
+    flex: 1;
+    min-width: 300px;
+  }
+  .checklist ul { list-style: none; padding: 0; }
+  .checklist li {
+    background: #fef9e7;
+    margin: 8px 0;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 1.1em;
+    border-left: 6px solid #ffb74d;
+  }
+  .upload-zone {
+    border: 3px dashed #4fc3f7;
+    border-radius: 16px;
+    padding: 30px;
+    text-align: center;
+    cursor: pointer;
+    background: #f1fbff;
+  }
+  .upload-zone:hover { background: #e3f7ff; }
+  #preview {
+    max-width: 100%;
+    margin-top: 15px;
+    border-radius: 12px;
+    display: none;
+  }
+  button.big {
+    display: block;
+    margin: 15px auto 0;
+    background: #66bb6a;
+    color: white;
+    border: none;
+    padding: 14px 30px;
+    font-size: 1.1em;
+    border-radius: 30px;
+    cursor: pointer;
+  }
+  button.big:hover { background: #57a05a; }
+  button.big:disabled { background: #a5d6a7; cursor: not-allowed; }
+  #feedback {
+    max-width: 1000px;
+    margin: 20px auto;
+    background: #fff;
+    border-radius: 20px;
+    padding: 20px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    display: none;
+  }
+  .status-good { color: #2e7d32; font-weight: bold; }
+  .status-missing { color: #c62828; font-weight: bold; }
+  .status-fix { color: #ef6c00; font-weight: bold; }
+  .progress-bar {
+    height: 20px;
+    background: #eee;
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 10px 0;
+  }
+  .progress-fill {
+    height: 100%;
+    background: #4fc3f7;
+    width: 0%;
+    transition: width 0.6s ease;
+  }
+  .error-box {
+    background: #ffebee;
+    color: #c62828;
+    padding: 12px;
+    border-radius: 10px;
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<h1>🐾 Design My Digital Pet App! 🐾</h1>
+
+<div class="container">
+  <div class="card checklist">
+    <h2>✅ What Your App Needs</h2>
+    <ul>
+      <li>📝 A box for the pet's name</li>
+      <li>🏠 A button to go home</li>
+      <li>🐱 A picture of your pet</li>
+      <li>👤 A profile button</li>
+      <li>🍖 A button to feed your pet</li>
+      <li>🐾 A button to see all your pets</li>
+      <li>🎮 A button to play with your pet</li>
+    </ul>
+    <p><em>Tip: think about WHERE each button should go! 🧐</em></p>
+  </div>
+
+  <div class="card">
+    <h2>📤 Upload Your Drawing</h2>
+    <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
+      <p>📷 Tap to take a photo or choose a file</p>
+      <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none" onchange="handleFile(event)">
+    </div>
+    <img id="preview" alt="Your drawing preview">
+    <button class="big" id="submitBtn" onclick="submitDrawing()">🔍 Check My App!</button>
+  </div>
+</div>
+
+<div id="feedback">
+  <h2>🤖 Your App Coach Says...</h2>
+  <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+  <div id="feedbackText"></div>
+</div>
+
+<script>
+let uploadedImage = null;
+
+function handleFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    uploadedImage = e.target.result;
+    const preview = document.getElementById('preview');
+    preview.src = uploadedImage;
+    preview.style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function submitDrawing() {
+  if (!uploadedImage) {
+    alert("Please upload your drawing first! 📸");
+    return;
+  }
+
+  const submitBtn = document.getElementById('submitBtn');
+  const feedbackPanel = document.getElementById('feedback');
+  const feedbackText = document.getElementById('feedbackText');
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = '⏳ Checking...';
+  feedbackPanel.style.display = 'block';
+  feedbackText.innerHTML = "🤔 Looking closely at your app design...";
+
+  try {
+    const response = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: uploadedImage })
+    });
+
+    if (!response.ok) {
+      throw new Error('Server returned an error');
+    }
+
+    const result = await response.json();
+    renderFeedback(result);
+
+  } catch (err) {
+    feedbackText.innerHTML = `<div class="error-box">
+      😅 Oops! Something went wrong. Please try again.
+    </div>`;
+    console.error(err);
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = '🔍 Check My App!';
+  }
+}
+
+function renderFeedback(result) {
+  const total = 7;
+  const found = result.detected.length;
+  document.getElementById('progressFill').style.width = `${(found/total)*100}%`;
+
+  let html = `<p>You found <strong>${found} / ${total}</strong> parts! 🎉</p><ul>`;
+  result.detected.forEach(item => {
+    html += `<li class="status-good">✅ ${item}</li>`;
+  });
+  (result.misplaced || []).forEach(item => {
+    html += `<li class="status-fix">🔄 ${item.name} — try moving it to the <strong>${item.correctPosition}</strong></li>`;
+  });
+  (result.missing || []).forEach(item => {
+    html += `<li class="status-missing">❌ Missing: ${item}</li>`;
+  });
+  html += `</ul><p>${result.encouragement}</p>`;
+
+  document.getElementById('feedbackText').innerHTML = html;
+}
+</script>
+</body>
+</html>
